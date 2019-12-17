@@ -1,0 +1,14 @@
+<view class="container">
+  <view
+    class="item {{ 'item_' + index }}"
+    wx:for="{{ list }}"
+    wx:for-item="item"
+    wx:for-index="index"
+    wx:key="id"
+    catch:longpress="longpress"
+    catch:touchmove="touchmove"
+    catch:touchend="touchend"
+    style="{{ curIndex === index ? itemStyle : '' }}"
+    data-index="{{ index }}"
+  ></view>
+</view>;

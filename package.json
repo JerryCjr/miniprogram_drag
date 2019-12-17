@@ -1,0 +1,45 @@
+{
+  "name": "miniprogram_drag",
+  "version": "1.0.0",
+  "description": "宝玩小程序开发模板",
+  "main": "miniprogram_dist/index.js",
+  "scripts": {
+    "lint": "eslint --ext .js src gulpfile.js  --fix",
+    "codeshift": "jscodeshift src/components src/pages src/app.js -t ./conf/transformer.js",
+    "dev": "eslint --ext .js src --fix && gulp dev --development",
+    "build": "eslint --ext .js src --fix && gulp build --production"
+  },
+  "repository": {},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "colors": "^1.4.0",
+    "del": "^3.0.0",
+    "download": "^7.1.0",
+    "eslint": "^5.16.0",
+    "eslint-config-standard": "^12.0.0",
+    "eslint-plugin-import": "^2.18.2",
+    "eslint-plugin-node": "^8.0.0",
+    "eslint-plugin-promise": "^4.2.1",
+    "eslint-plugin-standard": "^4.0.1",
+    "gulp": "^4.0.2",
+    "gulp-eslint": "^5.0.0",
+    "gulp-filter": "^5.1.0",
+    "gulp-install": "^1.1.0",
+    "gulp-less": "^4.0.1",
+    "gulp-px2rpx": "^0.2.2",
+    "gulp-rename": "^1.4.0",
+    "gulp-replace": "^1.0.0",
+    "jscodeshift": "^0.6.4",
+    "md5": "^2.2.1",
+    "qn": "^1.3.0",
+    "through2": "^3.0.1",
+    "tinify": "^1.6.0-beta.2",
+    "yargs": "^12.0.2"
+  },
+  "dependencies": {
+    "babyfs-wxapp-api": "^2.0.0",
+    "babyfs-wxapp-runningtime": "^1.1.1"
+  }
+}
