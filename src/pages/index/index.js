@@ -1,70 +1,102 @@
-import wxapi from "babyfs-wxapp-api";
+import wxapi from 'babyfs-wxapp-api';
 
 let list = [];
 (() => {
   for (let index = 0; index < 9; index++) {
     list.push({
       id: index,
-      itemDom: {
-        width: 0,
-        height: 0,
-        top: 0,
-        left: 0
+      key: index,
+      data: {
+        name: `${index}元素`
       },
-      listContainerDom: null
+      fixed: false,
+      x: 0,
+      y: 0,
+      z: 0
     });
   }
+  list[7].fixed = true;
 })(list);
 
 Page({
   data: {
-    list,
-    itemStyle: "",
+    list, // 列表数据
+
+    columns: 4, // 支持列数
+
     curIndex: -1, // 当前拖拽对象的下标 默认值是-1
 
-    // 非视图层
-    dragFlag: false, // 拖拽标志位
+    preOriginKey: -1,
+
+    itemTransition: false,
+
+    itemWrapHeight: 0,
+    itemDom: null,
+
     // 需要translate的偏移量
     translateX: 0,
     translateY: 0,
-    translateZ: 0,
-    // translate之前的起始位置
-    startX: 0,
-    startY: 0,
-    device: null
+    translateZ: 0
+  },
+  customData: {
+    startTouches: null,
+    moveTouches: null,
+    startTranslateX: 0,
+    startTranslateY: 0,
+    device: null,
+    dragging: false // 拖拽标志位
   },
   async onReady() {
-    const device = await wxapi.getSystemInfoAsync();
-    console.log("device", device);
-    this.setData({ device });
-    this.initDom();
+    this.customData.device = await wxapi.getSystemInfoAsync();
+    await this.initDom();
   },
   async longpress(event) {
-    this.setData({ dragFlag: true });
-    const curIndex = event.target.dataset.index;
-    if (curIndex < 0) {
-      await wxapi.showToastAsync({ title: "error: curIndex为空" });
-      return false;
-    }
-    // await wxapi.vibrateShortAsync();
-    let translateX, translateY, translateZ;
-    const touches = event.touches[0];
-    const { pageX: startX, pageY: startY } = { ...touches };
-    const { itemDom } = { ...this.data.list[curIndex] };
-    const originX = itemDom.width / 2 + itemDom.left;
-    const originY = itemDom.height / 2 + itemDom.top;
+    const touches = event.changedTouches[0];
+    if (!touches) return false; // 非法touches 退出
+    // TODO: startTouch 包含的信息不需要应用到视图 应该把startPageX startPageY全部迁移到这里
+    this.customData.startTouches = touches;
 
-    translateX = startX - originX;
-    translateY = startY - originY;
+    if (this.customData.dragging) return false; // 正在拖拽 退出
+    this.customData.dragging = true;
+
+    const curIndex = event.currentTarget.dataset.index;
+    if (this.isFixed(curIndex)) return false; // 固定列 退出
+
+    // console.log(touches, this.customData.dragging, curIndex);
+    await this.vibrateHandler();
+
+    let translateX = 0;
+    let translateY = 0;
+    let translateZ = 0;
+
+    const { pageX: startPageX, pageY: startPageY } = { ...touches };
+    const { itemDom, itemWrapDom } = { ...this.data };
+    // const originX = itemDom.width / 2 + itemDom.left; // 中心点的初始x偏移
+    // const originY = itemDom.height / 2 + itemDom.top; // 中心点的初始y偏移
+
+    const originX = itemDom.width / 2 + itemWrapDom.left; // 中心点的初始x偏移
+    const originY = itemDom.height / 2 + itemWrapDom.top; // 中心点的初始y偏移
+
+    if (this.data.columns > 1) {
+      // 多列的时候计算X轴初始位移, 使 item 水平中心移动到点击处
+      translateX = startPageX - originX;
+    }
+    translateY = startPageY - originY;
     translateZ = 0;
 
-    console.log(curIndex, startX, startY);
-    const itemStyle = `transform: translate3d(${translateX}px, ${translateY}px, ${translateZ}px)`;
+    this.customData.startTranslateX = translateX; // 长按之后的中心点位移
+    this.customData.startTranslateY = translateY;
+
+    // console.log(startPageX);
+    // console.log(startPageY);
+    // console.log(originX);
+    // console.log(originY);
+    // console.log(translateX);
+    // console.log(translateY);
+
     this.setData({
       curIndex,
-      itemStyle,
-      startX,
-      startY,
+      curZIndex: curIndex, // TODO: 注释
       translateX,
       translateY,
       translateZ
@@ -72,83 +104,240 @@ Page({
   },
 
   async touchmove(event) {
-    if (!this.data.dragFlag) {
+    const touches = event.changedTouches[0];
+    if (!touches) return false;
+
+    if (!this.customData.dragging) return false; // 正在拖拽 退出
+
+    // TODO: startTouch 包含的信息不需要应用到视图 应该把startPageX startPageY全部迁移到这里
+    this.customData.moveTouches = touches;
+
+    // 如果不是同一个触发点则返回
+    if (
+      this.customData.startTouches.identifier !==
+      this.customData.moveTouches.identifier
+    ) {
       return false;
     }
-    let translateX, translateY, translateZ;
-    const touches = event.touches[0];
-    const { pageX: moveX, pageY: moveY } = { ...touches };
-    const { translateX: originX, translateY: originY, startX, startY } = {
-      ...this.data
+
+    let translateX = 0;
+    let translateY = 0;
+    let translateZ = 0;
+
+    const { pageX: startPageX, pageY: startPageY } = {
+      ...this.customData.startTouches
     };
-    translateX = moveX - startX + originX;
-    translateY = moveY - startY + originY;
+
+    const { pageX: movePageX, pageY: movePageY } = {
+      ...this.customData.moveTouches
+    };
+
+    const durationX = movePageX - startPageX; // 手指偏移量
+    const durationY = movePageY - startPageY;
+
+    translateX = durationX + this.customData.startTranslateX; // 手指偏移量 + 初始位置
+    translateY = durationY + this.customData.startTranslateY;
     translateZ = 0;
-    const itemStyle = `transform: translate3d(${translateX}px, ${translateY}px, ${translateZ}px)`;
+
+    if (this.data.columns === 1) translateX = 0;
+
+    // TODO: 超过一屏的情况如何处理
     this.setData({
-      itemStyle,
-      startX: moveX,
-      startY: moveY,
       translateX,
       translateY,
       translateZ
     });
-    // console.log(this.data.curIndex, translateX, translateY);
 
-    const rows = 3;
-    const columns = 3;
+    // originKey endKey
+    const originKey = parseInt(event.currentTarget.dataset.key);
+    const endKey = this.calculateTheEndKey(translateX, translateY);
 
-    const curColumn = Math.round(
-      (translateX / this.data.listContainerDom.width) * columns
-    );
-    const curRow = Math.round(
-      (translateY / this.data.listContainerDom.height) * rows
-    );
+    if (this.isFixed(endKey)) return false; // 如果是固定 item 则 return
 
-    console.log("curColumn", curColumn);
-    console.log("curRow", curRow);
+    // 防止拖拽过程中发生乱序问题
+    const { preOriginKey } = { ...this.data };
+    if (originKey === endKey || preOriginKey === originKey) return false;
+    this.setData({ preOriginKey: originKey });
+
+    console.log(originKey);
+    console.log(endKey);
+    console.log(preOriginKey);
+
+    this.insert(originKey, endKey); // 触发排序
   },
 
   async touchend(event) {
+    if (!this.customData.dragging) return;
     this.clearAll();
   },
 
-  // 初始化dom信息
-  initDom() {
-    const list = this.data.list;
-    list.map(item => {
-      wxapi
-        .createSelectorQuery()
-        .select(`.item_${item.id}`)
-        .boundingClientRect(itemDom => {
-          list[item.id]["itemDom"] = itemDom;
-          this.setData({ list });
-        })
-        .exec();
-    });
+  /**
+   * 根据起始key和目标key去重新计算每一项的新的key
+   */
+  insert(origin, end) {
+    this.setData({ itemTransition: true });
+    let list;
+    if (origin < end) {
+      // 正序拖动
+      list = this.data.list.map(item => {
+        if (item.fixed) return item;
+        if (item.key > origin && item.key <= end) {
+          item.key = this.l2r(item.key - 1, origin);
+        } else if (item.key === origin) {
+          item.key = end;
+        }
+        return item;
+      });
+      this.getPosition(list);
+    } else if (origin > end) {
+      // 倒序拖动
+      list = this.data.list.map(item => {
+        if (item.fixed) return item;
+        if (item.key >= end && item.key < origin) {
+          item.key = this.r2l(item.key + 1, origin);
+        } else if (item.key === origin) {
+          item.key = end;
+        }
+        return item;
+      });
+      this.getPosition(list);
+    }
+  },
+  /**
+   * 正序拖动 key 值和固定项判断逻辑
+   */
+  l2r(key, origin) {
+    if (key === origin) return origin;
+    if (this.data.list[key].fixed) {
+      return this.l2r(key - 1, origin);
+    } else {
+      return key;
+    }
+  },
+  /**
+   * 倒序拖动 key 值和固定项判断逻辑
+   */
+  r2l(key, origin) {
+    if (key === origin) return origin;
+    if (this.data.list[key].fixed) {
+      return this.r2l(key + 1, origin);
+    } else {
+      return key;
+    }
+  },
 
+  // 初始化dom信息
+  async initDom() {
+    this.clearAll();
+    this.setData({ itemTransition: false });
+    let list = [...this.data.list];
+    await this.getPosition(list, false);
     wxapi
       .createSelectorQuery()
-      .select(".container")
-      .boundingClientRect(containerDom => {
-        const listContainerDom = containerDom;
-        this.setData({ listContainerDom });
+      .select('.item')
+      .boundingClientRect(res => {
+        let rows = Math.ceil(this.data.list.length / this.data.columns);
+        this.setData({
+          itemDom: res,
+          itemWrapHeight: rows * res.height
+        });
+
+        console.log(this.data.itemDom);
+
+        wxapi
+          .createSelectorQuery()
+          .select('.container')
+          .boundingClientRect(res => {
+            this.setData({
+              itemWrapDom: res
+            });
+            console.log(this.data.itemWrapDom);
+          })
+          .exec();
       })
       .exec();
   },
 
+  // 获取位置信息
+  async getPosition(data, vibrate = true) {
+    let list = data.map(item => {
+      item.x = item.key % this.data.columns;
+      item.y = Math.floor(item.key / this.data.columns);
+      return item;
+    });
+    console.log(list)
+    this.setData({ list });
+    // if (!vibrate) return;
+    // await this.vibrateHandler();
+    // let listData = [];
+    // list.forEach(item => {
+    //   listData[item.key] = item.data;
+    // });
+    // console.log(list);
+    // TODO: 通知父组件 listData数据更改
+    // this.triggerEvent("change", { listData: listData });
+  },
+
+  // calculate the end key
+  calculateTheEndKey(translateX, translateY) {
+    let { itemDom } = this.data;
+
+    let rows = Math.ceil(this.data.list.length / this.data.columns);
+    let curColumn = Math.round(translateX / itemDom.width);
+    let curRow = Math.round(translateY / itemDom.height);
+
+    if (curColumn > this.data.columns - 1) {
+      curColumn = this.data.columns - 1;
+    } else if (curColumn < 0) {
+      curColumn = 0;
+    }
+
+    if (curRow > rows - 1) {
+      curRow = rows - 1;
+    } else if (curRow < 0) {
+      curRow = 0;
+    }
+
+    let endKey = curColumn + this.data.columns * curRow;
+    if (endKey >= this.data.list.length) {
+      endKey = this.data.list.length - 1;
+    }
+
+    return endKey;
+  },
+
+  // 是否是固定列
+  isFixed(key) {
+    let list = [...this.data.list];
+    return list && list[key] && list[key].fixed;
+  },
+
+  async vibrateHandler() {
+    if (this.customData.device.platform !== 'devtools') {
+      await wxapi.vibrateShortAsync();
+    }
+  },
+
   // 重置所有的装填
   clearAll() {
-    const itemStyle = `transform: translate3d(0, 0, 0)`;
     this.setData({
       curIndex: -1,
-      dragFlag: false,
+      preOriginKey: -1,
+
       translateX: 0,
       translateY: 0,
-      translateZ: 0,
-      startX: 0,
-      startY: 0,
-      itemStyle
+      translateZ: 0
     });
+    // 延迟清空
+    setTimeout(() => {
+      this.setData({
+        curZIndex: -1
+      });
+    }, 300);
+    this.customData.dragging = false;
+    this.customData.startTouches = null;
+    this.customData.moveTouches = null;
+    this.customData.startTranslateX = 0;
+    this.customData.startTranslateY = 0;
   }
 });

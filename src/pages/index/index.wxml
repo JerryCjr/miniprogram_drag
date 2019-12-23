@@ -1,14 +1,17 @@
-<view class="container">
+<view class="container" style="height: {{ itemWrapHeight }}px;">
   <view
-    class="item {{ 'item_' + index }}"
+    class="item {{ 'item_' + index }} {{ index === curIndex ? 'cur-index' : '' }} {{ index === curZIndex ? 'cur-z-index' : '' }} {{ itemTransition && index !== curIndex ? 'item-transition' : '' }} {{ item.fixed ? 'fixed' : '' }}"
+    style="transform: translate3d({{ index === curIndex ? translateX + 'px' : item.x * 100 + '%' }}, {{ index === curIndex ? translateY + 'px' : item.y * 100 + '%' }}, 0px);width: {{ 100 / columns }}%"
     wx:for="{{ list }}"
-    wx:for-item="item"
-    wx:for-index="index"
     wx:key="id"
-    catch:longpress="longpress"
+    data-index="{{ item.key }}"
+    data-key="{{ index }}"
+    bind:longpress="longpress"
     catch:touchmove="touchmove"
     catch:touchend="touchend"
-    style="{{ curIndex === index ? itemStyle : '' }}"
-    data-index="{{ index }}"
-  ></view>
-</view>;
+  >
+    <view class="part">
+      <view class="piece">{{ item.data.name }}</view>
+    </view>
+  </view>
+</view>
